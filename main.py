@@ -7,6 +7,7 @@ from sed.config import CLASSES_NAMES
 from sed.data import get_file_labels, read_files
 from sed.features import knn_standardisation, load_feature_selectors, load_scaler
 from sed.models import evaluate_knn_on_test, train_knn_binary_per_class
+from sed.visualization import run_qualitative_evaluation
 
 PATH_TO_DATASET = "MLPC2026_dataset_development"
 PATH_TO_SCALER = "sed/data/scaler_reduced_features.joblib"
@@ -51,13 +52,9 @@ def main() -> None:
         f"{PATH_TO_DATASET}/audio_features/*.npz"
     )
 
-    train_files, val_files, test_files = build_stratified_split(
+    _train_files, _val_files, test_files = build_stratified_split(
         all_audio_features_paths, rng
     )
-
-    X_train, Y_train = read_files(train_files, label_type="binary")
-    X_val, Y_val = read_files(val_files, label_type="binary")
-    X_test, Y_test = read_files(test_files, label_type="binary")
 
     # --- Fitting (run once, then comment out and use load_* below) ---
     # from sed.features import (
@@ -80,20 +77,20 @@ def main() -> None:
     scaler = load_scaler(PATH_TO_SCALER)
 
     #--- Training new KNN models ---
-    X_train_knn, X_val_knn, _ = knn_standardisation(
-        X_train, X_val, X_test,
-        vt_selector=vt_selector,
-        scaler=scaler,
-        class_mi_scores=class_mi_scores,
-        k=120,
-        class_names=CLASSES_NAMES,
-    )
-    train_knn_binary_per_class(
-        X_train_knn, X_val_knn,
-        Y_train, Y_val,
-        class_names=CLASSES_NAMES,
-        n_neighbors=13,
-    )
+    # X_train_knn, X_val_knn, _ = knn_standardisation(
+    #     X_train, X_val, X_test,
+    #     vt_selector=vt_selector,
+    #     scaler=scaler,
+    #     class_mi_scores=class_mi_scores,
+    #     k=120,
+    #     class_names=CLASSES_NAMES,
+    # )
+    # train_knn_binary_per_class(
+    #     X_train_knn, X_val_knn,
+    #     Y_train, Y_val,
+    #     class_names=CLASSES_NAMES,
+    #     n_neighbors=13,
+    # )
 
     # --- Evaluating on test set ---
     #evaluate_knn_on_test(
@@ -105,6 +102,26 @@ def main() -> None:
     #    k_features=120,
     #    n_neighbours=3,
     #)
+
+    # --- Qualitative evaluation (k=120, n=3) ---
+    # Two test files chosen for contrasting content:
+    #  003125 — kitchen/hallway scene with vacuum_cleaner, bell_ringing,
+    #           footsteps, door_open_close, light_switch
+    #  001467 — bedroom scene with phone_ringing, footsteps, light_switch,
+    #           window_open_close
+    selected = [
+        f"{PATH_TO_DATASET}/audio_features/003125.npz",
+        f"{PATH_TO_DATASET}/audio_features/001467.npz",
+    ]
+    run_qualitative_evaluation(
+        test_files=test_files,
+        vt_selector=vt_selector,
+        scaler=scaler,
+        class_mi_scores=class_mi_scores,
+        k_features=120,
+        n_neighbours=3,
+        selected_files=selected,
+    )
 
 
 if __name__ == "__main__":
