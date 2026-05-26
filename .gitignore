@@ -1,0 +1,45 @@
+# ── Dataset ───────────────────────────────────────────────────────────────────
+# Large audio dataset (~750 MB) — obtain separately
+MLPC2026_dataset_development/
+
+# ── Trained models ────────────────────────────────────────────────────────────
+# Binary model artefacts (~14 GB) — regenerate with main.py
+knn_models/
+
+# ── Generated metrics ─────────────────────────────────────────────────────────
+# Per-run CSVs are regenerated on each training run.
+# knn_experiment_log.csv is kept — it is the human-readable experiment summary.
+knn_metrics/
+
+# ── Fitted preprocessors ──────────────────────────────────────────────────────
+# Binary joblib files — regenerate by calling fit_and_save_* in main.py.
+# mi_scores.json is kept as it is a small, readable artefact.
+sed/data/*.joblib
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# ── Virtual environments ──────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+.env
+
+# ── Jupyter ───────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ── IDE / editor ──────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
