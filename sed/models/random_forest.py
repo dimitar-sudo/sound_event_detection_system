@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import (
+    average_precision_score,
     balanced_accuracy_score,
     f1_score,
     precision_score,
@@ -49,10 +50,11 @@ def _score_row(
         **hparams,
         "threshold": round(threshold, 4),
         "balanced_accuracy": round(balanced_accuracy_score(y_true, y_pred), 4),
-        "macro_f1": round(f1_score(y_true, y_pred, average="macro", zero_division=0), 4),
+        "binary_f1": round(f1_score(y_true, y_pred, average="binary", pos_label=1, zero_division=0), 4),
         "precision": round(precision_score(y_true, y_pred, zero_division=0), 4),
         "recall": round(recall_score(y_true, y_pred, zero_division=0), 4),
         "roc_auc": round(roc_auc_score(y_true, proba[:, 1]), 4) if has_both_classes else float("nan"),
+        "pr_auc": round(average_precision_score(y_true, proba[:, 1]), 4) if has_both_classes else float("nan"),
     }
 
 
@@ -142,10 +144,11 @@ def train_rf_binary_per_class(
         print(
             f"[{cls}] saved → {model_path} | "
             f"bal_acc={row['balanced_accuracy']:.4f}  "
-            f"f1={row['macro_f1']:.4f}  "
-            f"roc_auc={row['roc_auc']:.4f}  "
+            f"f1={row['binary_f1']:.4f}  "
             f"prec={row['precision']:.4f}  "
             f"rec={row['recall']:.4f}  "
+            f"roc_auc={row['roc_auc']:.4f}  "
+            f"pr_auc={row['pr_auc']:.4f}  "
             f"thr={thr:.4f}"
         )
 
@@ -156,7 +159,7 @@ def train_rf_binary_per_class(
     print(f"\nPer-class validation metrics saved → {metrics_path}")
     print(metrics_df)
 
-    numeric_cols = ["balanced_accuracy", "macro_f1", "roc_auc", "precision", "recall"]
+    numeric_cols = ["balanced_accuracy", "binary_f1", "precision", "recall", "roc_auc", "pr_auc"]
     avg_row = {
         "timestamp": timestamp,
         "run_id": run_id,
@@ -231,16 +234,17 @@ def evaluate_rf_on_test(
         print(
             f"[{cls}] "
             f"bal_acc={row['balanced_accuracy']:.4f}  "
-            f"f1={row['macro_f1']:.4f}  "
-            f"roc_auc={row['roc_auc']:.4f}  "
+            f"f1={row['binary_f1']:.4f}  "
             f"prec={row['precision']:.4f}  "
             f"rec={row['recall']:.4f}  "
+            f"roc_auc={row['roc_auc']:.4f}  "
+            f"pr_auc={row['pr_auc']:.4f}  "
             f"thr={thr:.4f}"
         )
 
     metrics_df = pd.DataFrame(rows).set_index("class").sort_index()
 
-    numeric_cols = ["balanced_accuracy", "macro_f1", "roc_auc", "precision", "recall"]
+    numeric_cols = ["balanced_accuracy", "binary_f1", "precision", "recall", "roc_auc", "pr_auc"]
     print("\n── Mean over classes ─────────────────────────────────────────────")
     print(metrics_df[numeric_cols].mean().round(4))
 

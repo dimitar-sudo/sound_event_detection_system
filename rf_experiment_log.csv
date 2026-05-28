@@ -1,2 +1,2 @@
-timestamp,run_id,n_estimators,max_depth,min_samples_leaf,avg_val_balanced_accuracy,avg_val_macro_f1,avg_val_roc_auc,avg_val_precision,avg_val_recall,n_classes_trained,metrics_file
-20260528_075919,n100_mdNone_msl1_20260528_075919,100,,1,0.8313,0.6256,0.9003,0.2402,0.8368,15,rf_metrics/rf_val_metrics_n100_mdNone_msl1_20260528_075919.csv
+timestamp,run_id,n_estimators,max_depth,min_samples_leaf,avg_val_balanced_accuracy,avg_val_binary_f1,avg_val_precision,avg_val_recall,avg_val_roc_auc,avg_val_pr_auc,n_classes_trained,metrics_file
+20260528_130528,n100_mdNone_msl1_20260528_130528,100,,1,0.8313,0.3523,0.2402,0.8368,0.9003,0.5216,15,rf_metrics/rf_val_metrics_n100_mdNone_msl1_20260528_130528.csv

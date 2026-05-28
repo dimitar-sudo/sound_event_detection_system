@@ -1,4 +1,5 @@
 import glob
+import time
 from collections import defaultdict
 
 import numpy as np
@@ -49,6 +50,7 @@ def build_stratified_split(
 
 
 def main() -> None:
+    t_start = time.perf_counter()
     rng = np.random.default_rng(seed=42)
 
     all_audio_features_paths = glob.glob(
@@ -78,6 +80,9 @@ def main() -> None:
         max_depth=None,
         min_samples_leaf=1,
     )
+
+    elapsed = time.perf_counter() - t_start
+    print(f"\nTotal runtime: {elapsed:.1f}s ({elapsed / 60:.1f} min)")
 
     # --- Test set evaluation held out until best hyperparameters are chosen ---
     # evaluate_rf_on_test(
