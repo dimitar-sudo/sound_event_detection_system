@@ -3,13 +3,15 @@
 MLPC2026_dataset_development/
 
 # ── Trained models ────────────────────────────────────────────────────────────
-# Binary model artefacts (~14 GB) — regenerate with main.py
+# Binary model artefacts — regenerate with main.py
 knn_models/
+rf_models/
 
 # ── Generated metrics ─────────────────────────────────────────────────────────
 # Per-run CSVs are regenerated on each training run.
-# knn_experiment_log.csv is kept — it is the human-readable experiment summary.
+# *_experiment_log.csv files are kept — they are the human-readable experiment summaries.
 knn_metrics/
+rf_metrics/
 
 # ── Fitted preprocessors ──────────────────────────────────────────────────────
 # Binary joblib files — regenerate by calling fit_and_save_* in main.py.
@@ -43,3 +45,8 @@ env/
 # ── OS ────────────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+
+
+# ── Claude ────────────────────────────────────────────────────────────────────
+#claude sessions
+claude.txt

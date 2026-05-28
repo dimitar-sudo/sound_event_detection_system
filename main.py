@@ -5,14 +5,17 @@ import numpy as np
 
 from sed.config import CLASSES_NAMES
 from sed.data import get_file_labels, read_files
-from sed.features import knn_standardisation, load_feature_selectors, load_scaler
-from sed.models import evaluate_knn_on_test, train_knn_binary_per_class
-from sed.visualization import run_qualitative_evaluation
+from sed.models import train_rf_binary_per_class
+from sed.models.random_forest import _positive_class_thresholds
+
+# from sed.features import knn_standardisation, load_feature_selectors, load_scaler
+# from sed.models import evaluate_knn_on_test, train_knn_binary_per_class
+# from sed.visualization import run_qualitative_evaluation
 
 PATH_TO_DATASET = "MLPC2026_dataset_development"
-PATH_TO_SCALER = "sed/data/scaler_reduced_features.joblib"
-PATH_TO_VT_SELECTOR = "sed/data/variance_selector.joblib"
-PATH_TO_MI_SCORES = "sed/data/mi_scores.json"
+# PATH_TO_SCALER = "sed/data/scaler_reduced_features.joblib"
+# PATH_TO_VT_SELECTOR = "sed/data/variance_selector.joblib"
+# PATH_TO_MI_SCORES = "sed/data/mi_scores.json"
 
 
 def build_stratified_split(
@@ -52,76 +55,39 @@ def main() -> None:
         f"{PATH_TO_DATASET}/audio_features/*.npz"
     )
 
-    _train_files, _val_files, test_files = build_stratified_split(
+    train_files, val_files, test_files = build_stratified_split(
         all_audio_features_paths, rng
     )
+    print(f"Split: {len(train_files)} train / {len(val_files)} val / {len(test_files)} test")
 
-    # --- Fitting (run once, then comment out and use load_* below) ---
-    # from sed.features import (
-    #     fit_and_save_scaler,
-    #     fit_and_save_variance_selector,
-    #     fit_and_save_mi_selector,
-    #     apply_variance_selector,
-    # )
-    # vt_selector = fit_and_save_variance_selector(X_train, vt_path=PATH_TO_VT_SELECTOR)
-    # X_train_vt = apply_variance_selector(X_train, vt_selector)
-    # scaler = fit_and_save_scaler(X_train_vt, path=PATH_TO_SCALER)
-    # X_train_scaled = scaler.transform(X_train_vt)
-    # fit_and_save_mi_selector(X_train_scaled, Y_train, CLASSES_NAMES, mi_path=PATH_TO_MI_SCORES)
+    # --- Load raw features (no preprocessing for RF) ---
+    print("Loading training data...")
+    X_train, Y_train = read_files(train_files, label_type="binary")
+    print("Loading validation data...")
+    X_val, Y_val = read_files(val_files, label_type="binary")
+    print(f"X_train: {X_train.shape}  X_val: {X_val.shape}\n")
 
-    # --- Inference (normal entry point) ---
-    vt_selector, class_mi_scores = load_feature_selectors(
-        mi_path=PATH_TO_MI_SCORES,
-        vt_path=PATH_TO_VT_SELECTOR,
+    # --- Train RF (baseline experiment) ---
+    models, val_metrics = train_rf_binary_per_class(
+        X_train=X_train,
+        X_val=X_val,
+        Y_train=Y_train,
+        Y_val=Y_val,
+        class_names=CLASSES_NAMES,
+        n_estimators=100,
+        max_depth=None,
+        min_samples_leaf=1,
     )
-    scaler = load_scaler(PATH_TO_SCALER)
 
-    #--- Training new KNN models ---
-    # X_train_knn, X_val_knn, _ = knn_standardisation(
-    #     X_train, X_val, X_test,
-    #     vt_selector=vt_selector,
-    #     scaler=scaler,
-    #     class_mi_scores=class_mi_scores,
-    #     k=120,
-    #     class_names=CLASSES_NAMES,
+    # --- Test set evaluation held out until best hyperparameters are chosen ---
+    # evaluate_rf_on_test(
+    #     X_test=X_test,
+    #     Y_test=Y_test,
+    #     n_estimators=...,
+    #     max_depth=...,
+    #     min_samples_leaf=...,
+    #     thresholds=_positive_class_thresholds(Y_train),
     # )
-    # train_knn_binary_per_class(
-    #     X_train_knn, X_val_knn,
-    #     Y_train, Y_val,
-    #     class_names=CLASSES_NAMES,
-    #     n_neighbors=13,
-    # )
-
-    # --- Evaluating on test set ---
-    #evaluate_knn_on_test(
-    #    X_test=X_test,
-    #    Y_test=Y_test,
-    #    vt_selector=vt_selector,
-    #    scaler=scaler,
-    #    class_mi_scores=class_mi_scores,
-    #    k_features=120,
-    #    n_neighbours=3,
-    #)
-
-    # --- Qualitative evaluation (k=120, n=3) ---
-    # Two test files chosen for contrasting content:
-    #  003125 — kitchen/hallway scene with vacuum_cleaner, bell_ringing,
-    #           footsteps, door_open_close, light_switch
-    #  001467 — bedroom scene with phone_ringing, footsteps, light_switch,
-    #           window_open_close
-    selected = [
-        f"{PATH_TO_DATASET}/audio_features/003125.npz",
-        f"{PATH_TO_DATASET}/audio_features/001467.npz",
-    ]
-    run_qualitative_evaluation(
-        test_files=test_files,
-        vt_selector=vt_selector,
-        scaler=scaler,
-        class_mi_scores=class_mi_scores,
-        k_features=120,
-        n_neighbours=3,
-        selected_files=selected,
-    )
 
 
 if __name__ == "__main__":
