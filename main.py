@@ -76,9 +76,9 @@ def main() -> None:
         Y_train=Y_train,
         Y_val=Y_val,
         class_names=CLASSES_NAMES,
-        n_estimators=100,
+        n_estimators=300,
         max_depth=None,
-        min_samples_leaf=1,
+        min_samples_leaf=16
     )
 
     elapsed = time.perf_counter() - t_start
