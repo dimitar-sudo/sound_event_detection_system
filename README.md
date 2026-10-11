@@ -1,316 +1,178 @@
-# Sound Event Detection System
+# 🔊 Sound Event Detection
 
-**Frame-level multi-label detection of 15 domestic sound events using per-class KNN with mutual-information feature selection.**
+**Detecting 15 household sounds — running water, a vacuum cleaner, a phone ringing, footsteps — second by second in real-world recordings, evaluated on people the model has never heard. The final gradient-boosting model reaches a test PR-AUC of 0.62 against a chance level of 0.06.**
 
-![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)
-![scikit-learn](https://img.shields.io/badge/scikit--learn-1.8%2B-F7931E?style=flat-square&logo=scikit-learn&logoColor=white)
-![Plotly](https://img.shields.io/badge/Plotly-6.7%2B-3F4F75?style=flat-square&logo=plotly&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
-![Dataset](https://img.shields.io/badge/Dataset-MLPC2026-blueviolet?style=flat-square)
-![Classes](https://img.shields.io/badge/Classes-15-orange?style=flat-square)
+[![tests](https://github.com/dimitar-sudo/sound_event_detection_system/actions/workflows/tests.yml/badge.svg)](https://github.com/dimitar-sudo/sound_event_detection_system/actions/workflows/tests.yml)
+[![Python](https://img.shields.io/badge/Python-3.12-blue.svg)](https://www.python.org/)
+[![scikit-learn](https://img.shields.io/badge/scikit--learn-1.8-F7931E.svg)](https://scikit-learn.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
----
+![Detections on a test recording](docs/figures/demo_timeline.png)
 
-## 🎧 Demo / Preview
+<sub>A test recording by a person not seen during training: the spectrogram above, the model's frame-by-frame detections below. This file was picked automatically as the best-detected test recording with at least two annotated sound types (`pick_demo_file` in `sed/visualization/figures.py`), so it shows the model at its best. Typical performance is in [Results](#results).</sub>
 
-> **Qualitative evaluation** — mel spectrogram with frame-level ground truth and predictions overlaid.  
-> Green = true positive · Red = false positive · Orange = false negative
+## Overview
 
-```
-File: 003125.npz  — target: vacuum_cleaner; bell_ringing; footsteps; door_open_close; light_switch
-┌────────────────────────────────────────────────────────────────────────┐
-│  Mel Spectrogram (log)                                                 │
-│  ░░░░░▓▓▓▓▒▒▒▒░░░░░░▒▒▒▒▒▓▓▓▓▓▒▒▒░░░░░░░░░░░░░░░░░░░░░░░░░░░         │
-├────────────────────────────────────────────────────────────────────────┤
-│  Expected (ground truth)              Predicted (KNN k=120, n=3)       │
-│  bell_ringing    ██████░░░░░░░░░░     ██████░░░░░░░░░░ (TP)            │
-│  vacuum_cleaner  ████████████████     ████████████████ (TP)            │
-│  footsteps       ░░░░░░███░░░█░░░     ░░░░░░██░░░░░░░░ (FN)            │
-│  door_open_close ░░░░░░░░░░░░███░     ░░░░░░░░░░░░███░ (TP)            │
-│  light_switch    ░░░░░░░░░░░░░░█░     ░░░░░░░░░░░░░░█░ (TP)            │
-└────────────────────────────────────────────────────────────────────────┘
-```
+The task is **multi-label, frame-level detection**. Each recording is cut into 1-second frames (0.5 s hop), and for every frame the model decides, for each of 15 sound classes, whether that sound is present. Several sounds can be active at once.
 
-Interactive HTML reports are written to `knn_qualitative/` when `run_qualitative_evaluation()` executes.
+| | |
+|---|---|
+| **Data** | MLPC2026 development set: 3,656 recordings from 408 people, 168,239 frames, 960 pre-extracted audio features per frame (mel-spectrogram, MFCCs + deltas, spectral statistics) |
+| **Labels** | Several annotators per recording; a frame is positive when the majority agree |
+| **Challenge** | Rare events: each class is present in only 1%–13% of frames |
+| **Protocol** | Split **by person** (70 / 15 / 15), so no one's recordings, rooms or devices appear in both training and test |
+| **Final model** | One gradient-boosted tree ensemble per class, with per-class decision thresholds |
 
----
+## Results
 
-## 📋 Overview
+Test-set scores, averaged over the 15 classes. Each model's hyperparameters and thresholds were chosen on the validation people only; the test people were used once, for this table.
 
-This system detects the presence of 15 domestic and office sound events (bell ringing, footsteps, keyboard typing, etc.) at the **frame level** across audio recordings from the MLPC2026 challenge dataset. Each recording is represented as a sequence of pre-extracted feature vectors; the task is multi-label classification — multiple events can be active simultaneously.
+| Model | PR-AUC | F1 | Precision | Recall |
+|---|:---:|:---:|:---:|:---:|
+| Prevalence baseline | 0.060 | 0.111 | 0.060 | 1.000 |
+| KNN | 0.487 | 0.486 | 0.482 | 0.510 |
+| Random forest | 0.567 | 0.543 | 0.556 | 0.562 |
+| **Gradient boosting** | **0.620** | 0.598 | 0.614 | 0.604 |
 
-The core model is a bank of **15 independent binary KNN classifiers** — one per sound class — each operating on a class-specific feature subspace selected by mutual information scoring. This one-vs-rest decomposition keeps each classifier focused on the discriminative structure of its own class, avoiding interference from the high class imbalance present across the full label set. The preprocessing pipeline (VarianceThreshold → StandardScaler → per-class MI top-k) is fitted exclusively on training data and serialised to disk to guarantee no leakage at inference time.
+<p align="center"><img src="docs/figures/model_comparison.png" width="70%" alt="Model comparison"></p>
 
----
+**Per class.** Sounds that are long and steady (vacuum cleaner, running water, microwave, keyboard) are detected reliably. Short, sharp sounds (a light switch, a door, a drawer or window opening and closing) are much harder, most likely because they fill only a fraction of a 1-second frame and are easily masked by background noise. Every class scores at least 4× its chance level.
 
-## ✨ Key Features
+<p align="center"><img src="docs/figures/per_class_pr_auc.png" width="70%" alt="Per-class PR-AUC"></p>
 
-- **One-vs-rest binary KNN bank** — 15 distance-weighted classifiers, each trained on its own class-optimal feature subset.
-- **Per-class mutual information feature selection** — selects the top-120 most informative features out of 960 dimensions independently for each class.
-- **960-dimensional acoustic feature vector** — covers ZCR, mel-spectrogram statistics (512-d), MFCCs + Δ + ΔΔ (384-d), spectral flux, flatness, centroid, bandwidth, contrast, rolloff, energy, and power.
-- **Stratified multilabel split** — train/val/test partitioning is stratified by label fingerprint (the full 15-bit label combination), preserving co-occurrence distributions across all splits.
-- **Experiment tracking** — every training run appends balanced accuracy and macro F1 to `knn_experiment_log.csv`, enabling reproducible hyperparameter comparison across `k_features × n_neighbours` sweeps.
-- **Interactive Plotly visualisations** — mel-spectrogram + TP/FP/FN frame overlays, per-class confusion matrix grid, and hyperparameter performance curves exported as self-contained HTML.
-- **Artefact-safe inference** — scaler, variance selector, and MI scores are loaded from disk; the fit functions are intentionally commented out in `main.py` to prevent accidental refit.
+<div align="center">
 
----
+**Gradient boosting — per-class test metrics**
 
-## 🏗️ Architecture
+| Class | Prevalence | PR-AUC | F1 | Precision | Recall | Threshold |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| Vacuum cleaner | 7.1% | 0.877 | 0.799 | 0.793 | 0.805 | 0.079 |
+| Running water | 11.5% | 0.848 | 0.763 | 0.726 | 0.804 | 0.146 |
+| Microwave | 7.5% | 0.807 | 0.754 | 0.779 | 0.730 | 0.241 |
+| Keyboard typing | 10.8% | 0.807 | 0.746 | 0.817 | 0.687 | 0.234 |
+| Phone ringing | 7.4% | 0.769 | 0.732 | 0.779 | 0.690 | 0.204 |
+| Coffee machine | 4.5% | 0.726 | 0.661 | 0.850 | 0.540 | 0.243 |
+| Cutlery dishes | 7.3% | 0.714 | 0.666 | 0.679 | 0.652 | 0.192 |
+| Toilet flushing | 3.8% | 0.690 | 0.644 | 0.799 | 0.539 | 0.317 |
+| Keychain | 5.1% | 0.685 | 0.646 | 0.600 | 0.700 | 0.144 |
+| Bell ringing | 1.6% | 0.584 | 0.556 | 0.604 | 0.516 | 0.023 |
+| Footsteps | 13.5% | 0.568 | 0.539 | 0.502 | 0.581 | 0.150 |
+| Door open close | 4.5% | 0.390 | 0.432 | 0.378 | 0.504 | 0.125 |
+| Light switch | 1.0% | 0.348 | 0.429 | 0.359 | 0.532 | 0.012 |
+| Window open close | 1.6% | 0.249 | 0.303 | 0.221 | 0.483 | 0.030 |
+| Wardrobe drawer open close | 2.5% | 0.240 | 0.304 | 0.320 | 0.289 | 0.128 |
 
-```
-MLPC2026 Dataset (.npz audio feature files, 3 666 recordings)
-            │
-            ▼
-┌───────────────────────────────────┐
-│   Stratified Train / Val / Test   │
-│        70%  /  20%  /  10%        │
-│  split by 15-bit label fingerprint│
-└───────────────────────────────────┘
-            │
-            ▼
-┌───────────────────────────────────┐
-│       Preprocessing (fit on train)│
-│                                   │
-│  1. VarianceThreshold (σ²≥0.01)   │   960-d → pruned
-│  2. StandardScaler (μ=0, σ=1)     │   normalise
-│  3. Per-class MI top-120 mask     │   → 120-d per class
-└───────────────────────────────────┘
-            │
-            ▼
-┌─────────────────────────────────────────────────────────┐
-│              Per-Class Binary KNN Bank (×15)            │
-│                                                         │
-│  class_i ──► X[:, MI_mask_i]  ──►  KNN(n=3, w=dist)   │
-│                                       │                 │
-│                              ŷ_i ∈ {0, 1}  (binary)    │
-└─────────────────────────────────────────────────────────┘
-            │
-            ▼
-  Frame-level multi-label prediction  (N × 15)
-  Evaluated with balanced accuracy + macro F1
-```
+</div>
 
-**Label aggregation:** Each annotation file stores scores from multiple annotators per frame and class. Scores above 0.25 are thresholded to binary votes; a class is considered active if strictly more than half the annotators agree.
+## How the project evolved
 
----
+1. **Baseline.** Scoring every frame with the class's training prevalence gives the "no skill" reference: PR-AUC equals prevalence (0.06 on average).
+2. **KNN.** My first model: variance filter → standardisation → the top-*k* features per class by mutual information → distance-weighted KNN. It beats the baseline clearly (test PR-AUC 0.49). The sweep was instructive: many neighbours (127) worked far better than few, likely because averaging over more neighbours gives smoother probability scores to rank by. Aggressive feature selection hurt; keeping 480 of 960 features scored the same as keeping all of them.
+3. **Random forest.** Trees work directly on the raw features, with no scaling or feature selection, and clearly outperform KNN (test PR-AUC 0.57).
+4. **Gradient boosting.** Histogram-based gradient boosting gave the best validation PR-AUC. It trained in less than half the random forest's time (16 vs 37 minutes per configuration on average) and produces a 27 MB model, so it is the one shipped (test PR-AUC 0.62).
 
-## 📊 Results
+**Fixing the evaluation along the way.** My earlier experiments had three problems that made their scores unreliable, and the current protocol fixes each:
 
-Test-set evaluation — best configuration: **k_features = 120, n_neighbours = 3**.
-
-| Class | Balanced Acc. | Macro F1 |
+| Earlier version | Problem | Now |
 |---|---|---|
-| bell_ringing | 0.7624 | 0.8312 |
-| running_water | 0.7691 | 0.7890 |
-| keyboard_typing | 0.7430 | 0.7591 |
-| microwave | 0.7280 | 0.7594 |
-| phone_ringing | 0.7312 | 0.7868 |
-| vacuum_cleaner | 0.7153 | 0.7463 |
-| keychain | 0.7037 | 0.7407 |
-| toilet_flushing | 0.6345 | 0.6359 |
-| coffee_machine | 0.6323 | 0.6913 |
-| footsteps | 0.6239 | 0.6294 |
-| light_switch | 0.5741 | 0.6109 |
-| cutlery_dishes | 0.5671 | 0.5936 |
-| door_open_close | 0.5609 | 0.5705 |
-| window_open_close | 0.5395 | 0.5461 |
-| wardrobe_drawer_open_close | 0.5377 | 0.5494 |
-| **Mean** | **0.6548** | **0.6826** |
+| Split by recording | The same person's recordings (same room and device) were in both train and test | Split **by person** |
+| "Macro F1" averaged over present *and* absent | With events in at most 13% of frames, the "absent" half dominates and inflates the score | **PR-AUC** and **F1 of the positive class** |
+| Validation and test used different decision thresholds | Test scores did not reflect the tuned model | Per-class thresholds chosen on validation and reused unchanged on test |
 
-Hyperparameter sweep at k=120 (validation set):
+## Method
 
-| n\_neighbours | Avg Bal. Acc. | Avg Macro F1 |
-|---|---|---|
-| **3** | **0.6433** | **0.6670** |
-| 5 | 0.6388 | 0.6677 |
-| 7 | 0.6348 | 0.6648 |
-| 9 | 0.6322 | 0.6627 |
-| 11 | 0.6299 | 0.6605 |
-| 13 | 0.6285 | 0.6596 |
+- **Model selection.** Every model's grid is trained on the training people and ranked by mean validation PR-AUC, which does not depend on a threshold. When the best setting landed on the edge of a grid, the grid was extended until the optimum was inside it.
+- **Thresholds.** For each class, the probability threshold that maximises validation F1 is stored and applied as-is to test and in `predict`. Thresholds are plain probabilities, so a rare class can (and does) get a threshold far below 0.5.
+- **Metrics.** PR-AUC is the headline metric because it measures ranking quality on rare positives; a random model scores the class prevalence. F1, precision and recall describe the detector at its chosen operating point.
 
-Performance degrades monotonically as `n_neighbours` increases, confirming that the local neighbourhood structure in the MI-selected subspace is tight.
+![Hyperparameter search](docs/figures/hyperparameter_search.png)
 
----
+<sub>Blank KNN cells were not tried: the grid was extended only in the direction the optimum was moving.</sub>
 
-## 📁 Project Structure
+All numbers in this README are generated from [`results/`](results/): `summary.csv` (model comparison), `test_metrics_*.csv` (per class), `selected_configs.json` (chosen hyperparameters and thresholds) and `sweeps/*.csv` (every configuration tried).
 
-```
-sound_event_detection_system/
-├── main.py                          # Entry point — train, evaluate, visualise
-├── requirements.txt                 # Python dependencies
-├── knn_experiment_log.csv           # Append-only hyperparameter sweep log
-│
-├── sed/                             # Core library package
-│   ├── config.py                    # Feature names, class names (15 classes)
-│   ├── data/
-│   │   ├── loader.py                # .npz reader, label aggregation, split utils
-│   │   ├── mi_scores.json           # Persisted per-class MI scores (tracked)
-│   │   ├── scaler_reduced_features.joblib  # Fitted StandardScaler (gitignored)
-│   │   └── variance_selector.joblib        # Fitted VarianceThreshold (gitignored)
-│   ├── features/
-│   │   └── selection.py             # VT, scaler, MI fitting/loading/application
-│   ├── models/
-│   │   ├── baseline.py              # Majority-class baseline classifier
-│   │   └── knn.py                   # Per-class KNN train + test evaluation
-│   └── visualization/
-│       ├── plots.py                 # Class distribution + hyperparameter charts
-│       └── qualitative.py           # Frame-level prediction overlays + CM grid
-│
-├── MLPC2026_dataset_development/    # Dataset root (gitignored, ~750 MB)
-│   ├── audio_features/              # Pre-extracted .npz files (3 666 recordings)
-│   ├── annotations.csv              # Raw annotator-level event annotations
-│   └── metadata.csv                 # Recording metadata (device, scene, etc.)
-│
-├── knn_models/                      # Trained model artefacts (gitignored, ~14 GB)
-│   └── knn_k120_n3/                 # One .joblib per class per run
-│
-└── knn_metrics/                     # Per-run metric CSVs (gitignored)
-    └── knn_TEST_metrics_k120_n3_*.csv
-```
+## Skills demonstrated
 
----
+- **Machine learning:** multi-label classification under heavy class imbalance; KNN, random forests and gradient boosting compared under one protocol; mutual-information feature selection; per-class threshold tuning.
+- **Rigorous evaluation:** leakage-free grouped splitting, metrics chosen for rare events, validation-only model selection and a single use of the test set. I found and corrected flaws in my own earlier evaluation.
+- **Audio / signal processing:** working with frame-level spectral features (mel-spectrogram, MFCCs, spectral flux, contrast) and multi-annotator labels.
+- **Software engineering:** a modular Python package with a CLI, resumable experiment sweeps, cached intermediate results, pytest unit tests, GitHub Actions CI and pinned dependencies.
+- **Communication:** reproducible figures and a README generated from saved results.
 
-## ⚡ Installation
+## Quickstart
 
-**Requirements:** Python 3.11+
+Requires **Python 3.12**.
 
 ```bash
-git clone https://github.com/<your-username>/sound_event_detection_system.git
+git clone https://github.com/dimitar-sudo/sound_event_detection_system.git
 cd sound_event_detection_system
-
-python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
-
+python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-Place the `MLPC2026_dataset_development/` folder at the project root before running any scripts.
-
----
-
-## 🚀 Usage
-
-### Run qualitative evaluation (default entry point)
-
-Loads pre-fitted preprocessors and models, runs frame-level predictions on two curated test files, and saves interactive HTML plots to `knn_qualitative/`.
+**Try the trained model.** No dataset needed; an example recording's features are included:
 
 ```bash
-python main.py
+python -m sed predict examples/000601.npz --plot timeline.png
 ```
 
-### Fit preprocessors from scratch
-
-Uncomment the fitting block in `main.py` after loading train data:
-
-```python
-from sed.features import (
-    fit_and_save_scaler,
-    fit_and_save_variance_selector,
-    fit_and_save_mi_selector,
-    apply_variance_selector,
-)
-
-vt_selector = fit_and_save_variance_selector(X_train, vt_path=PATH_TO_VT_SELECTOR)
-X_train_vt  = apply_variance_selector(X_train, vt_selector)
-scaler       = fit_and_save_scaler(X_train_vt, path=PATH_TO_SCALER)
-X_train_sc   = scaler.transform(X_train_vt)
-fit_and_save_mi_selector(X_train_sc, Y_train, CLASSES_NAMES, mi_path=PATH_TO_MI_SCORES)
+```
+000601.npz: 62 frames, 6 detected events
+         event  onset_s  offset_s
+ running_water      1.5      27.5
+cutlery_dishes      4.0       6.0
+cutlery_dishes      6.0       8.0
+cutlery_dishes      8.0      11.5
+cutlery_dishes     12.0      15.5
+cutlery_dishes     16.0      24.0
 ```
 
-### Train KNN models
+The cutlery sound is split into several events. The pause at 11–12 s is real, but the other gaps are one or two missed frames, which smoothing predictions over time would close (see [Limitations](#limitations--next-steps)). The model raises no false alarms anywhere in this file.
 
-```python
-from sed.features import knn_standardisation
-from sed.models import train_knn_binary_per_class
+**Reproduce everything.** Place the `MLPC2026_dataset_development/` folder (with `audio_features/` and `metadata.csv`) in the project root, then:
 
-X_train_knn, X_val_knn, _ = knn_standardisation(
-    X_train, X_val, X_test,
-    vt_selector=vt_selector,
-    scaler=scaler,
-    class_mi_scores=class_mi_scores,
-    k=120,
-    class_names=CLASSES_NAMES,
-)
-
-models, metrics_df = train_knn_binary_per_class(
-    X_train_knn, X_val_knn,
-    Y_train, Y_val,
-    class_names=CLASSES_NAMES,
-    n_neighbors=3,
-)
+```bash
+python -m sed prepare                 # cache all frames, print split statistics
+python -m sed sweep baseline          # each sweep is resumable
+python -m sed sweep knn
+python -m sed sweep random_forest
+python -m sed sweep boosting
+python -m sed evaluate                # select on validation, score on test → results/
+python -m sed export                  # save the selected boosting model → models/
+python -m sed figures                 # regenerate docs/figures/
+pytest -q
 ```
 
-### Evaluate on the held-out test set
+On a laptop CPU (Intel i7-13620H), the full set of sweeps took about 5 hours, most of it the random forest.
 
-```python
-from sed.models import evaluate_knn_on_test
+## Project structure
 
-metrics_df = evaluate_knn_on_test(
-    X_test=X_test,
-    Y_test=Y_test,
-    vt_selector=vt_selector,
-    scaler=scaler,
-    class_mi_scores=class_mi_scores,
-    k_features=120,
-    n_neighbours=3,
-)
+```
+├── sed/
+│   ├── __main__.py            # CLI: prepare, sweep, evaluate, export, figures, predict
+│   ├── config.py              # classes, feature groups, paths, split settings
+│   ├── data/                  # .npz loading, majority-vote labels, frame cache, split by person
+│   ├── models/                # per-class detector wrapper, KNN feature selection, model grids
+│   ├── evaluation.py          # PR-AUC / F1 metrics and threshold selection
+│   ├── experiment.py          # sweeps, model selection, test evaluation, export
+│   ├── inference.py           # run the shipped model on a file, merge frames into events
+│   └── visualization/         # README figures
+├── models/detector.joblib     # shipped model + per-class thresholds
+├── examples/                  # example feature file for the quickstart
+├── results/                   # all metrics behind this README
+├── docs/figures/
+└── tests/
 ```
 
-### Generate visualisations
+## Limitations & next steps
 
-```python
-from sed.visualization import visualize_class_distribution, visualize_knn_n_neighbours
+- **No temporal context.** Each frame is classified independently. Smoothing predictions over time (e.g. a median filter), or a sequence model such as a CRNN, would likely help most for the short, impulsive classes.
+- **Frame-level metrics only.** Event-based metrics (onset/offset tolerance, as in the DCASE challenges) would better reflect how a detector is used in practice.
+- **Pre-extracted features.** Learning from raw spectrograms with a CNN, or from pretrained audio embeddings (e.g. PANNs, BEATs), is the natural next step.
+- **Single split and seed.** Repeating with cross-validation by person would give confidence intervals.
 
-# Class frequency across train / val / test splits
-visualize_class_distribution(Y_train, Y_val, Y_test, CLASSES_NAMES, save=True)
+## Author
 
-# Hyperparameter sweep results
-visualize_knn_n_neighbours(
-    experiment_log="knn_experiment_log.csv",
-    k_features_filter=120,
-    save_path="knn_n_neighbours_performance.png",
-)
-```
+**Dimitar Karaskakovski** · [LinkedIn](https://www.linkedin.com/in/dimitar-karaskakovski-85166436b) · [GitHub](https://github.com/dimitar-sudo)
 
----
-
-## ⚙️ Configuration
-
-All key constants live in [sed/config.py](sed/config.py).
-
-| Parameter | Location | Default | Description |
-|---|---|---|---|
-| `CLASSES_NAMES` | `config.py` | 15 classes | Target sound event classes |
-| `FEATURE_NAMES` | `config.py` | 56 feature keys | Acoustic feature groups to load |
-| `variance_threshold` | `selection.py` | `0.01` | Minimum per-feature variance to retain |
-| `k` (MI top-k) | `knn_standardisation()` | `120` | Features selected per class by MI rank |
-| `n_neighbors` | `train_knn_binary_per_class()` | `5` (best found: `3`) | KNN neighbourhood size |
-| `weights` | `knn.py` | `"distance"` | KNN vote weighting scheme |
-| `train_ratio` | `build_stratified_split()` | `0.7` | Fraction of data used for training |
-| `val_ratio` | `build_stratified_split()` | `0.2` | Fraction of data used for validation |
-| `_ANNOTATION_THRESHOLD` | `loader.py` | `0.25` | Minimum annotator score to count as a positive vote |
-| `seed` | `main.py` | `42` | Global RNG seed for reproducibility |
-
-To sweep `n_neighbours`, modify the call in `main.py` and re-run; results are automatically appended to `knn_experiment_log.csv`.
-
----
-
-## 🛠️ Tech Stack
-
-| Tool | Role |
-|---|---|
-| Python 3.11+ | Runtime |
-| NumPy 2.4+ | Feature matrices, array ops |
-| pandas 3.0+ | Metrics DataFrames, CSV I/O |
-| scikit-learn 1.8+ | KNN, StandardScaler, VarianceThreshold, MI scoring, metrics |
-| joblib 1.5+ | Model and preprocessor serialisation |
-| Plotly 6.7+ | Interactive visualisation (HTML export) |
-| kaleido 1.3+ | Static image export from Plotly figures |
-
----
-
-## 📄 License
-
-This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for details.
-
-The MLPC2026 dataset is distributed under **CC0 (Public Domain Dedication)** by its respective collectors.
+Code released under the [MIT License](LICENSE). The MLPC2026 dataset (recordings, features and annotations) is distributed under CC0; the example file in `examples/` comes from it.

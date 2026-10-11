@@ -47,3 +47,25 @@ CLASSES_NAMES: list[str] = [
     "wardrobe_drawer_open_close",
     "window_open_close",
 ]
+
+# ── Paths ─────────────────────────────────────────────────────────────────────
+import os as _os
+
+ROOT: str = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+DATASET_DIR: str = _os.path.join(ROOT, "MLPC2026_dataset_development")
+CACHE_PATH: str = _os.path.join(ROOT, "cache", "frames.npz")
+RESULTS_DIR: str = _os.path.join(ROOT, "results")
+FIGURES_DIR: str = _os.path.join(ROOT, "docs", "figures")
+MODEL_DIR: str = _os.path.join(ROOT, "models")
+EXAMPLES_DIR: str = _os.path.join(ROOT, "examples")
+
+# ── Experiment protocol ───────────────────────────────────────────────────────
+SEED: int = 42
+# Fractions of *collectors* (people) assigned to each split. Every recording
+# from a given collector lands in the same split, so test performance reflects
+# unseen people, rooms and devices.
+TRAIN_FRACTION: float = 0.70
+VAL_FRACTION: float = 0.15
+# An annotator's score must exceed this to count as a positive vote; a frame is
+# labelled positive when strictly more than half of its annotators vote positive.
+ANNOTATION_THRESHOLD: float = 0.25
